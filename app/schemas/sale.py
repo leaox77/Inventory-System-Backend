@@ -1,0 +1,40 @@
+from pydantic import BaseModel
+from datetime import datetime
+from .product import ProductOut
+from typing import List, Optional
+
+class SaleDetailBase(BaseModel):
+    product_id: int
+    quantity: float
+    unit_price: float
+    discount: float = 0.0
+
+class SaleDetailCreate(SaleDetailBase):
+    pass
+
+class SaleDetailOut(SaleDetailBase):
+    product: ProductOut
+    total_line: float  # Cálculo del total por línea, teniendo en cuenta el descuento
+
+    class Config:
+        orm_mode = True
+
+class SaleBase(BaseModel):
+    client_id: Optional[int] = None  # Permite que sea opcional
+    branch_id: int
+    payment_method: str
+
+class SaleCreate(SaleBase):
+    items: List[SaleDetailCreate]  # Lista de detalles de venta, cada uno de tipo SaleDetailCreate
+    discount: Optional[float] = 0.0  # El descuento total, también opcional
+
+class SaleOut(SaleBase):
+    invoice_number: str
+    sale_date: datetime
+    subtotal: float
+    discount: float  # El descuento total aplicado a la venta
+    total: float
+    details: List[SaleDetailOut]  # Lista con los detalles de la venta, cada uno de tipo SaleDetailOut
+
+    class Config:
+        orm_mode = True
