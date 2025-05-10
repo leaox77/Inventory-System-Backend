@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from app.database import get_db
 from app.models.product import Product
@@ -10,6 +10,9 @@ from app.crud.product import create_product, get_product, update_product, delete
 from app.models.user import User
 from app.models.inventory import Inventory  # Import Inventory model
 from pydantic import ConfigDict
+from app.crud.product import (
+    create_product, get_product, update_product, delete_product, update_product_inventory
+)
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -116,6 +119,17 @@ def create_new_product(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permisos para realizar esta acción"
         )
+    # Verificar si el código de barras ya existe
+    existing_product = db.query(Product).filter(
+        Product.barcode == product.barcode
+    ).first()
+    
+    if existing_product:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El código de barras ya está en uso"
+        )
+    
     return create_product(db, product=product)
 
 @router.get("/{product_id}", response_model=ProductOut)
@@ -124,13 +138,31 @@ def read_product(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    product = get_product(db, product_id=product_id)
+    # Obtener el producto con sus relaciones de inventario
+    product = db.query(Product).options(
+        joinedload(Product.inventory_items)
+    ).filter(Product.product_id == product_id).first()
+    
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Producto no encontrado"
         )
-    return product
+    
+     # Convertir a diccionario
+    product_data = ProductOut.model_validate(product).model_dump()
+    
+    # Agregar los items de inventario al response
+    product_data["inventory_items"] = [
+        {
+            "branch_id": item.branch_id,
+            "quantity": float(item.quantity),
+            "inventory_id": item.inventory_id
+        }
+        for item in product.inventory_items
+    ]
+    
+    return product_data
 
 @router.put("/{product_id}", response_model=ProductOut)
 def update_existing_product(
@@ -150,6 +182,14 @@ def update_existing_product(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Producto no encontrado"
         )
+    
+     # Actualizar inventario si se proporciona
+    if hasattr(product, 'inventory_assignments') and product.inventory_assignments:
+        update_product_inventory(db, product_id, product.inventory_assignments)
+    
+    # Refrescar datos del producto
+    db.refresh(db_product)
+
     return db_product
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
