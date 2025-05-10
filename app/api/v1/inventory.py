@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import Query, APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.database import get_db
 from app.models.inventory import Inventory
@@ -52,3 +52,22 @@ def update_inventory(
     db.commit()
     db.refresh(db_inventory)
     return db_inventory
+
+from typing import Optional
+from fastapi import Query
+
+@router.get("/", response_model=List[InventoryOut])
+def get_inventory(
+    branch_id: Optional[int] = Query(None),
+    product_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    query = db.query(Inventory)
+
+    if branch_id is not None:
+        query = query.filter(Inventory.branch_id == branch_id)
+    if product_id is not None:
+        query = query.filter(Inventory.product_id == product_id)
+
+    return query.all()
