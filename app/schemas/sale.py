@@ -1,7 +1,9 @@
 from pydantic import BaseModel
 from datetime import datetime
 from .product import ProductOut
+from .client import ClientOut
 from typing import List, Optional
+from .branch import BranchOut  # Import BranchOut from the appropriate module
 
 class SaleDetailBase(BaseModel):
     product_id: int
@@ -17,7 +19,7 @@ class SaleDetailOut(SaleDetailBase):
     total_line: float  # Cálculo del total por línea, teniendo en cuenta el descuento
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class SaleBase(BaseModel):
     client_id: Optional[int] = None  # Permite que sea opcional
@@ -29,12 +31,16 @@ class SaleCreate(SaleBase):
     discount: Optional[float] = 0.0  # El descuento total, también opcional
 
 class SaleOut(SaleBase):
+    sale_id: int
+    user_id: int
     invoice_number: str
     sale_date: datetime
     subtotal: float
     discount: float  # El descuento total aplicado a la venta
     total: float
+    status: str
     details: List[SaleDetailOut]  # Lista con los detalles de la venta, cada uno de tipo SaleDetailOut
-
+    client: ClientOut
+    branch: BranchOut
     class Config:
-        orm_mode = True
+        from_attributes = True
