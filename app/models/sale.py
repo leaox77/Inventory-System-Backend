@@ -15,12 +15,13 @@ class Sale(Base):
     subtotal = Column(Numeric(12, 2), nullable=False)
     discount = Column(Numeric(12, 2), default=0)
     total = Column(Numeric(12, 2), nullable=False)
-    payment_method = Column(String(20), nullable=False)
+    payment_method_id = Column(Integer, ForeignKey("payment_methods.payment_method_id"))
     status = Column(String(20), default="COMPLETADA")
 
     client = relationship("Client", back_populates="sales", lazy="joined")
     user = relationship("User", back_populates="sales")
     branch = relationship("Branch", back_populates="sales", lazy="joined")
+    payment_method = relationship("PaymentMethod", back_populates="sales")
     details = relationship("SaleDetail", back_populates="sale")
 
 class SaleDetail(Base):

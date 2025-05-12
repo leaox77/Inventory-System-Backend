@@ -1,12 +1,12 @@
-# schemas/client.py
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 class ClientBase(BaseModel):
     ci_nit: str
     full_name: str
-    email: str | None = None
-    phone: str | None = None
-    address: str | None = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
 
 class ClientCreate(ClientBase):
     pass
@@ -15,4 +15,4 @@ class ClientOut(ClientBase):
     client_id: int
     
     class Config:
-        from_attributes = True  # Reemplaza a orm_mode en Pydantic v2
+        from_attributes = True

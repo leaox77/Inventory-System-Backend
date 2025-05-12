@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .api.v1 import products, categories, inventory, sales, auth, users, unit_types
+from .api.v1 import products, categories, inventory, sales, auth, users, unit_types, clients, payment_methods
 from .database import Base, engine
 
 Base.metadata.create_all(bind=engine)
@@ -30,6 +30,8 @@ app.include_router(categories.router, prefix=settings.API_V1_STR)
 app.include_router(inventory.router, prefix=settings.API_V1_STR)
 app.include_router(sales.router, prefix=settings.API_V1_STR)
 app.include_router(unit_types.router, prefix=settings.API_V1_STR)
+app.include_router(clients.router, prefix=settings.API_V1_STR)
+app.include_router(payment_methods.router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def read_root():

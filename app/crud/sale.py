@@ -3,9 +3,11 @@ from ..models.sale import Sale, SaleDetail
 from ..models.inventory import Inventory  # Import Inventory model
 from ..models.client import Client  # Import Client model
 from ..models.product import Product  # Import Product model
+from ..models.payment_method import PaymentMethod  # Import PaymentMethod model
 from ..schemas.sale import SaleCreate
 from ..utils.sales import generate_invoice_number
 from datetime import datetime  # Import datetime
+from decimal import Decimal
 
 def create_sale(db: Session, sale: SaleCreate, user_id: int):
     # Verificar cliente si se proporcionó ID
@@ -14,6 +16,13 @@ def create_sale(db: Session, sale: SaleCreate, user_id: int):
         if not client:
             raise ValueError("Cliente no encontrado")
     
+    # Verificar que el método de pago existe
+    payment_method = db.query(PaymentMethod).filter(
+        PaymentMethod.payment_method_id == sale.payment_method_id
+    ).first()
+    if not payment_method:
+        raise ValueError("Método de pago no encontrado")
+
     # Verificar stock antes de crear la venta
     for item in sale.items:
         inventory = db.query(Inventory).filter(
@@ -39,7 +48,7 @@ def create_sale(db: Session, sale: SaleCreate, user_id: int):
         subtotal=subtotal,
         discount=sale.discount or 0,
         total=total,
-        payment_method=sale.payment_method,
+        payment_method_id=sale.payment_method_id,
         status="COMPLETADA",
         sale_date=datetime.utcnow()
     )
@@ -65,7 +74,7 @@ def create_sale(db: Session, sale: SaleCreate, user_id: int):
             Inventory.product_id == item.product_id,
             Inventory.branch_id == sale.branch_id
         ).first()
-        db_inventory.quantity -= item.quantity
+        db_inventory.quantity -= Decimal(str(item.quantity))
         db.add(db_inventory)
     
     db.commit()
@@ -75,6 +84,7 @@ def get_sales(db: Session, skip: int = 0, limit: int = 100, status: str = None, 
     query = db.query(Sale).options(
         joinedload(Sale.client),  # Carga eager del cliente
         joinedload(Sale.branch),  # Carga eager de la sucursal
+        joinedload(Sale.payment_method),  # <-- Añade esta línea
         joinedload(Sale.details).joinedload(SaleDetail.product)  # Carga eager de detalles y productos
     )
     
@@ -89,5 +99,6 @@ def get_sale(db: Session, sale_id: int):
     return db.query(Sale).options(
         joinedload(Sale.client),
         joinedload(Sale.branch),
+        joinedload(Sale.payment_method),
         joinedload(Sale.details).joinedload(SaleDetail.product)
     ).filter(Sale.sale_id == sale_id).first()
