@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Numeric, Integer, ForeignKey, DateTime, func
+from sqlalchemy import Column, Numeric, Integer, ForeignKey, DateTime, func, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .base import Base
 
@@ -13,3 +13,7 @@ class Inventory(Base):
 
     product = relationship("Product", back_populates="inventory_items")
     branch = relationship("Branch", back_populates="inventory_items")
+
+    __table_args__ = (
+        UniqueConstraint('product_id', 'branch_id', name='_inventory_product_branch_uc'),
+    )

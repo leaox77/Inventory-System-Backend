@@ -71,3 +71,27 @@ def get_inventory(
         query = query.filter(Inventory.product_id == product_id)
 
     return query.all()
+
+# routers/inventory.py
+@router.get("/verify-updates")
+def verify_inventory_updates(
+    branch_id: int,
+    product_ids: str,  # "1,2,3"
+    db: Session = Depends(get_db)
+):
+    try:
+        ids = [int(id) for id in product_ids.split(",")]
+        inventory = db.query(Inventory).filter(
+            Inventory.branch_id == branch_id,
+            Inventory.product_id.in_(ids)
+        ).all()
+        
+        return {
+            "status": "success",
+            "data": [
+                {"product_id": item.product_id, "quantity": float(item.quantity)}
+                for item in inventory
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))

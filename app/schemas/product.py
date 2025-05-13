@@ -24,6 +24,7 @@ class ProductCreate(ProductBase):
 class ProductOut(ProductBase):
     product_id: int
     is_active: bool
+    cost: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)  # Reemplaza orm_mode en Pydantic v2
 
 
