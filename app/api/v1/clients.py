@@ -1,83 +1,82 @@
-from fastapi import APIRouter, Depends, HTTPException
+# routers/client.py
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import or_
+from sqlalchemy import or_
 from typing import List, Optional
-from app.database import get_db
-from app.schemas.client import ClientOut, ClientCreate  # Asegúrate de importar los esquemas
-from app.models.client import Client  # El modelo SQLAlchemy solo para consultas
+from app.schemas.client import ClientOut, ClientCreate
+from app.crud.client import search_clients as search, get_clients as gets, get_client as get, create_client as create, update_client as update, delete_client as delete
+from app.dependencies import get_db
+from app.models.user import User
+from app.dependencies import get_current_active_user
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
-@router.get("/", response_model=List[ClientOut])  # Cambiado a ClientOut
+@router.get("/", response_model=List[ClientOut])
 def read_clients(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Obtiene una lista de clientes.
-    """
-    clients = db.query(Client).offset(skip).limit(limit).all()
-    return clients
+    """Obtiene lista de clientes con opción de búsqueda"""
+    if search:
+        return search_clients(db, search_term=search, limit=limit)
+    return gets(db, skip=skip, limit=limit)
 
 @router.get("/search", response_model=List[ClientOut])
 def search_clients(
-    search_term: str = None,  # Cambiamos a un único parámetro
-    db: Session = Depends(get_db)
+    search_term: str,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
-    query = db.query(Client)
-    if search_term:
-        query = query.filter(
-            or_(
-                Client.ci_nit.ilike(f"%{search_term}%"),
-                Client.full_name.ilike(f"%{search_term}%")
-            )
-        )
-    return query.limit(20).all()
+    """Búsqueda de clientes por CI/NIT o nombre"""
+    return search(db, search_term=search_term, limit=limit)
 
-@router.get("/{client_id}", response_model=ClientOut)  # ClientOut aquí
+@router.get("/{client_id}", response_model=ClientOut)
 def read_client(
     client_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Obtiene un cliente por su ID.
-    """
-    client = db.query(Client).filter(Client.client_id == client_id).first()
-    if not client:
+    """Obtiene un cliente por ID"""
+    client = get(db, client_id=client_id)
+    if client is None:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     return client
 
-@router.post("/", response_model=ClientOut, status_code=201)  # ClientOut aquí
+@router.post("/", response_model=ClientOut, status_code=status.HTTP_201_CREATED)
 def create_client(
-    client: ClientCreate,  # Usamos ClientCreate para la entrada
-    db: Session = Depends(get_db)
+    client: ClientCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Crea un nuevo cliente.
-    """
-    db_client = Client(**client.model_dump())  # Convertimos el schema Pydantic a modelo SQLAlchemy
-    db.add(db_client)
-    db.commit()
-    db.refresh(db_client)
-    return db_client  # FastAPI convertirá automáticamente a ClientOut
+    """Crea un nuevo cliente"""
+    return create(db=db, client=client)
 
-@router.put("/{client_id}", response_model=ClientOut)  # ClientOut aquí
+@router.put("/{client_id}", response_model=ClientOut)
 def update_client(
     client_id: int,
-    client: ClientCreate,  # Usamos ClientCreate para la entrada
-    db: Session = Depends(get_db)
+    client: ClientCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Actualiza un cliente existente.
-    """
-    db_client = db.query(Client).filter(Client.client_id == client_id).first()
-    if not db_client:
+    """Actualiza un cliente existente"""
+    db_client = get(db, client_id=client_id)
+    if db_client is None:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
-    for key, value in client.model_dump().items():
-        setattr(db_client, key, value)
-    
-    db.commit()
-    db.refresh(db_client)
-    return db_client
+    # Asegúrate de pasar los parámetros en el orden correcto
+    return update(db=db, client_id=client_id, updated_data=client)
+
+@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_client(
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Elimina un cliente"""
+    if not delete(db, client_id=client_id):
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return {"ok": True}
