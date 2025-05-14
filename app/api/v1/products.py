@@ -9,6 +9,7 @@ from app.utils.security import get_current_active_user
 from app.crud.product import create_product, get_product, update_product, delete_product
 from app.models.user import User
 from app.models.inventory import Inventory  # Import Inventory model
+from app.models.branch import Branch  # Import Branch model
 from pydantic import ConfigDict
 from app.crud.product import (
     create_product, get_product, update_product, delete_product, update_product_inventory
@@ -57,7 +58,10 @@ def read_products(
         inventory_query = db.query(
             Inventory.product_id,
             Inventory.branch_id,
-            Inventory.quantity
+            Inventory.quantity,
+            Branch.name.label("branch_name")
+        ).join(
+            Branch, Inventory.branch_id == Branch.branch_id
         ).filter(
             Inventory.product_id.in_(product_ids)
         )
@@ -74,6 +78,7 @@ def read_products(
                 inventory_by_product[item.product_id] = []
             inventory_by_product[item.product_id].append({
                 "branch_id": item.branch_id,
+                "branch_name": item.branch_name,
                 "quantity": float(item.quantity) if item.quantity else 0
             })
         
