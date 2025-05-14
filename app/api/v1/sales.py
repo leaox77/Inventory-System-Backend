@@ -8,6 +8,8 @@ from datetime import datetime
 
 from app.database import get_db
 from app.models.sale import Sale, SaleDetail
+from app.models.product import Product
+from app.models.branch import Branch
 from app.schemas.sale import SaleCreate, SaleOut
 from app.crud.sale import create_sale, get_sales, get_sale
 from app.utils.security import get_current_active_user
@@ -45,19 +47,6 @@ def read_sales(
     current_user: User = Depends(get_current_active_user)
 ):
     return get_sales(db, skip=skip, limit=limit)
-
-@router.get("/by-branch", response_model=List[SaleOut])
-def get_sales_by_branch(
-    branch_id: int,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """
-    Obtiene ventas filtradas por sucursal
-    """
-    return get_sales(db, branch_id=branch_id, skip=skip, limit=limit)
 
 @router.get("/{sale_id}", response_model=SaleOut)
 def read_sale(
@@ -208,3 +197,174 @@ def export_sales(
             status_code=500,
             detail=f"Error al generar el reporte: {str(e)}"
         )
+    
+# Añade estas rutas a tu sales.py
+
+@router.get("/report", response_model=dict)
+def get_sales_report(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Obtiene un reporte completo de ventas para el dashboard"""
+    try:
+        from sqlalchemy import func, desc
+        
+        # Total de ventas
+        total_sales = db.query(func.sum(Sale.total)).scalar() or 0
+        
+        # Cantidad de ventas
+        sales_count = db.query(Sale).count()
+        
+        # Promedio de ventas
+        average_sale = total_sales / sales_count if sales_count > 0 else 0
+        
+        # Ventas por fecha (últimos 7 días)
+        sales_by_date = db.query(
+            func.date(Sale.sale_date).label("date"),
+            func.sum(Sale.total).label("total")
+        ).group_by(
+            func.date(Sale.sale_date)
+        ).order_by(
+            func.date(Sale.sale_date).desc()
+        ).limit(7).all()
+        
+        # Ventas por categoría
+        sales_by_category = db.query(
+            Product.category_id,
+            func.sum(SaleDetail.quantity).label("quantity"),
+            func.sum(SaleDetail.total_line).label("total")
+        ).join(
+            SaleDetail, SaleDetail.product_id == Product.product_id
+        ).join(
+            Sale, Sale.sale_id == SaleDetail.sale_id
+        ).group_by(
+            Product.category_id
+        ).all()
+        
+        # Ventas por sucursal
+        sales_by_branch = db.query(
+            Branch.branch_id,
+            Branch.name.label("branch_name"),
+            func.sum(Sale.total).label("total")
+        ).join(
+            Sale, Sale.branch_id == Branch.branch_id
+        ).group_by(
+            Branch.branch_id,
+            Branch.name
+        ).all()
+        
+        return {
+            "totalSales": float(total_sales),
+            "salesCount": sales_count,
+            "averageSale": float(average_sale),
+            "salesByDate": [{
+                "date": str(date),
+                "total": float(total) if total else 0
+            } for date, total in sales_by_date],
+            "salesByCategory": [{
+                "category_id": c.category_id,
+                "category": "Categoría " + str(c.category_id),
+                "total": float(c.total) if c.total else 0
+            } for c in sales_by_category],
+            "salesByBranch": [{
+                "branch_id": b.branch_id,
+                "branch": b.branch_name,
+                "total": float(b.total) if b.total else 0
+            } for b in sales_by_branch]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/summary", response_model=dict)
+def get_sales_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Obtiene un resumen de ventas"""
+    try:
+        from sqlalchemy import func
+        
+        total_sales = db.query(func.sum(Sale.total)).scalar() or 0
+        sales_count = db.query(Sale).count()
+        average_sale = total_sales / sales_count if sales_count > 0 else 0
+        
+        return {
+            "totalSales": float(total_sales),
+            "salesCount": sales_count,
+            "averageSale": float(average_sale)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/top-products", response_model=List[dict])
+def get_top_products(
+    limit: int = 5,
+    order: str = 'desc',
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Obtiene los productos más o menos vendidos"""
+    try:
+        from sqlalchemy import func, desc, asc
+        
+        order_func = desc if order == 'desc' else asc
+        
+        products = db.query(
+            Product.product_id,
+            Product.name,
+            func.sum(SaleDetail.quantity).label("total_sold"),
+            func.sum(SaleDetail.total_line).label("total_revenue")
+        ).join(
+            SaleDetail, SaleDetail.product_id == Product.product_id
+        ).join(
+            Sale, Sale.sale_id == SaleDetail.sale_id
+        ).group_by(
+            Product.product_id,
+            Product.name
+        ).order_by(
+            order_func("total_sold")
+        ).limit(limit).all()
+        
+        return [{
+            "product_id": p.product_id,
+            "name": p.name,
+            "total_sold": float(p.total_sold) if p.total_sold else 0,
+            "total_revenue": float(p.total_revenue) if p.total_revenue else 0
+        } for p in products]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/by-branch", response_model=List[dict])
+def get_sales_by_branch(
+    branch_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Obtiene ventas por sucursal"""
+    try:
+        from sqlalchemy import func
+        query = db.query(
+            Branch.branch_id,
+            Branch.name.label("branch_name"),
+            func.sum(Sale.total).label("total_sales"),
+            func.count(Sale.sale_id).label("sales_count")
+        ).join(
+            Sale, Sale.branch_id == Branch.branch_id
+        ).group_by(
+            Branch.branch_id,
+            Branch.name
+        )
+        
+        if branch_id:
+            query = query.filter(Branch.branch_id == branch_id)
+            
+        results = query.all()
+        
+        return [{
+            "branch_id": r.branch_id,
+            "branch_name": r.branch_name,
+            "total_sales": float(r.total_sales) if r.total_sales else 0,
+            "sales_count": r.sales_count
+        } for r in results]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

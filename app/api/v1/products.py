@@ -24,7 +24,7 @@ class ProductOut(ProductOut):
 @router.get("/", response_model=Dict[str, Any])
 def read_products(
     skip: int = 0,
-    limit: int = 10,
+    limit: int = 200,
     search: Optional[str] = None,
     category_id: Optional[int] = None,
     unit_type: Optional[int] = None,
