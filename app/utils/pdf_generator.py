@@ -90,10 +90,9 @@ def generate_sales_report_pdf(sales):
     # Fecha de generación
     pdf.setFont("Helvetica", 12)
     pdf.drawString(1 * inch, height - 1.3 * inch, f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-    
+
     # Tabla de ventas
     data = [["Factura", "Fecha", "Cliente", "Sucursal", "Total", "Estado"]]
-    
     for sale in sales:
         data.append([
             sale.invoice_number,
@@ -103,9 +102,12 @@ def generate_sales_report_pdf(sales):
             f"${sale.total:.2f}",
             sale.status
         ])
-    
+
     # Crear tabla
-    table = Table(data, colWidths=[1.5*inch, inch, 2*inch, inch, inch, inch])
+    table = Table(
+        data,
+        colWidths=[1.5*inch, inch, 1.2*inch, 1.8*inch, inch, inch]
+    )
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -117,11 +119,58 @@ def generate_sales_report_pdf(sales):
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ('FONTSIZE', (0, 1), (-1, -1), 8)
     ]))
-    
-    # Dibujar tabla
-    table.wrapOn(pdf, width, height)
-    table.drawOn(pdf, 0.5 * inch, height - 2 * inch - len(data) * 15)
+
+    # Dejar espacio para encabezado y fecha
+    x_offset = 0.8 * inch
+    y_start_table = height - 2.2 * inch  # Espacio debajo del encabezado y fecha
+    table_width, table_height = table.wrap(0, 0)
+
+    # La tabla debe comenzar en y_start_table y dibujarse hacia abajo
+    table.drawOn(pdf, x_offset, y_start_table - table_height)
 
     pdf.save()
     buffer.seek(0)
     return buffer.getvalue()
+
+def generate_sales_csv(sales):
+    import csv
+    from io import StringIO
+    
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Encabezados
+    writer.writerow([
+        'Factura', 'Fecha', 'Cliente', 'NIT/CI', 'Sucursal',
+        'Método de Pago', 'Subtotal', 'Descuento', 'Total', 'Estado',
+        'Productos', 'Cantidad', 'Precio Unitario', 'Total Producto'
+    ])
+    
+    for sale in sales:
+        # Datos principales de la venta
+        main_data = [
+            sale.invoice_number,
+            sale.sale_date.strftime('%Y-%m-%d %H:%M'),
+            sale.client.full_name if sale.client else 'N/A',
+            sale.client.ci_nit if sale.client else 'N/A',
+            sale.branch.name if sale.branch else 'N/A',
+            sale.payment_method.name if sale.payment_method else 'N/A',
+            str(sale.subtotal),
+            str(sale.discount),
+            str(sale.total),
+            sale.status
+        ]
+        
+        # Detalles de productos
+        for detail in sale.details:
+            product_data = [
+                detail.product.name if detail.product else f'Producto ID {detail.product_id}',
+                str(detail.quantity),
+                str(detail.unit_price),
+                str(detail.total_line)
+            ]
+            
+            # Escribir una línea combinando datos principales y de producto
+            writer.writerow(main_data + product_data)
+    
+    return output.getvalue()

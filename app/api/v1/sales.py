@@ -1,13 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+from sqlalchemy.orm import joinedload
+from datetime import datetime
 
 from app.database import get_db
-from app.models.sale import Sale
+from app.models.sale import Sale, SaleDetail
 from app.schemas.sale import SaleCreate, SaleOut
 from app.crud.sale import create_sale, get_sales, get_sale
 from app.utils.security import get_current_active_user
 from app.models.user import User
+from app.utils.pdf_generator import generate_invoice_pdf, generate_sales_csv
 
 router = APIRouter(prefix="/sales", tags=["sales"])
 
@@ -105,3 +110,101 @@ def get_sales_by_date(
     
     return [{"date": str(date), "total": float(total)} for date, total in sales_by_date]
 
+@router.get("/{sale_id}/invoice")
+def generate_invoice(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    # Obtener la venta con todas las relaciones necesarias
+    sale = db.query(Sale).options(
+        joinedload(Sale.client),
+        joinedload(Sale.branch),
+        joinedload(Sale.user),
+        joinedload(Sale.payment_method),
+        joinedload(Sale.details).joinedload(SaleDetail.product)
+    ).filter(Sale.sale_id == sale_id).first()
+    
+    if not sale:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Venta no encontrada"
+        )
+    
+    # Generar el PDF
+    pdf_content = generate_invoice_pdf(sale)
+    
+    # Configurar la respuesta
+    headers = {
+        'Content-Disposition': f'attachment; filename="factura_{sale.invoice_number}.pdf"'
+    }
+    return StreamingResponse(
+        BytesIO(pdf_content),
+        media_type='application/pdf',
+        headers=headers
+    )
+
+from app.utils.pdf_generator import generate_sales_report_pdf
+from fastapi import Response
+
+@router.get("/export/{format}")
+def export_sales(
+    format: str,
+    db: Session = Depends(get_db),
+    status: Optional[str] = None,
+    branch_id: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Obtener las ventas filtradas con todos los detalles necesarios
+        query = db.query(Sale).options(
+            joinedload(Sale.client),
+            joinedload(Sale.branch),
+            joinedload(Sale.payment_method),
+            joinedload(Sale.details).joinedload(SaleDetail.product)
+        )
+        
+        if status:
+            query = query.filter(Sale.status == status)
+        if branch_id:
+            query = query.filter(Sale.branch_id == branch_id)
+        if start_date:
+            query = query.filter(Sale.sale_date >= start_date)
+        if end_date:
+            query = query.filter(Sale.sale_date <= end_date)
+        
+        sales = query.order_by(Sale.sale_date.desc()).all()
+        
+        if format == 'pdf':
+            pdf_content = generate_sales_report_pdf(sales)
+            headers = {
+                'Content-Disposition': f'attachment; filename="reporte_ventas_{datetime.now().strftime("%Y%m%d")}.pdf"'
+            }
+            return StreamingResponse(
+                BytesIO(pdf_content),
+                media_type='application/pdf',
+                headers=headers
+            )
+        elif format == 'csv':
+            # Implementar generación de CSV
+            csv_content = generate_sales_csv(sales)
+            headers = {
+                'Content-Disposition': f'attachment; filename="reporte_ventas_{datetime.now().strftime("%Y%m%d")}.csv"'
+            }
+            return StreamingResponse(
+                BytesIO(csv_content.encode('utf-8')),
+                media_type='text/csv',
+                headers=headers
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Formato no soportado. Use 'pdf' o 'csv'"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al generar el reporte: {str(e)}"
+        )
