@@ -5,9 +5,9 @@ from .base import Base
 class User(Base):
     __tablename__ = "users"
 
-    user_id = Column(Integer, primary_key=True, autoincrement=True)  # Agregar esta línea
+    user_id = Column(Integer, primary_key=True, autoincrement=True) 
     username = Column(String(50), nullable=False, unique=True)
-    password = Column(String(255), nullable=False)
+    password = Column(String(255))
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(100))
     is_active = Column(Boolean, default=True)
