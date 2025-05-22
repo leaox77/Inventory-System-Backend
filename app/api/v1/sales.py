@@ -46,7 +46,14 @@ def read_sales(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    return get_sales(db, skip=skip, limit=limit)
+    query = db.query(Sale)
+    
+    if status:
+        query = query.filter(Sale.status == status)
+    if branch_id:
+        query = query.filter(Sale.branch_id == branch_id)
+        
+    return query.offset(skip).limit(limit).all()
 
 @router.get("/{sale_id}", response_model=SaleOut)
 def read_sale(
