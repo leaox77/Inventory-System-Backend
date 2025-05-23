@@ -16,7 +16,8 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://sistema-de-inventarios-tu-super.vercel.app"],
+    allow_origins=["https://inventory-system-frontend-psi.vercel.app", "http://localhost:3000"],
+    allow_origin_regex="https?://.*\.vercel\.app",  # Permitir cualquier subdominio de vercel.app
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
