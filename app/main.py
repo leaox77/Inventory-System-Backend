@@ -40,3 +40,7 @@ app.include_router(role.router, prefix=settings.API_V1_STR)
 @app.get("/")
 def read_root():
     return {"message": "Bienvenido al API de SuperMarket Bolivia"}
+
+@app.get("/health", include_in_schema=False)
+def healthcheck():
+    return {"status": "healthy"}
