@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.responses import RedirectResponse
 from .config import settings
 from .api.v1 import products, categories, inventory, sales, auth, users, unit_types, clients, payment_methods, supplier, purchase_order, branches, role
 from .database import Base, engine
@@ -20,13 +21,6 @@ if not settings.DEBUG:
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(
-    CORSMiddleware,
     allow_origins=[
         "https://sistema-de-inventarios-tu-super.vercel.app",
         "http://localhost:3000"  # Para desarrollo local
@@ -34,15 +28,24 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 @app.middleware("http")
-async def force_https(request: Request, call_next):
+async def add_cors_headers(request: Request, call_next):
     response = await call_next(request)
-    if request.url.scheme == 'http' and not settings.DEBUG:
-        url = request.url.replace(scheme='https')
-        raise HTTPException(status_code=307, detail="Use HTTPS", headers={"Location": str(url)})
+    response.headers["Access-Control-Allow-Origin"] = "https://sistema-de-inventarios-tu-super.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return response
+
+@app.middleware("http")
+async def fix_redirects(request: Request, call_next):
+    if request.url.scheme == 'http' and not settings.DEBUG:
+        url = str(request.url).replace('http://', 'https://')
+        return RedirectResponse(url, status_code=301)
+    return await call_next(request)
 
 # Routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)
