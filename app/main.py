@@ -4,7 +4,7 @@ from .config import settings
 from .api.v1 import products, categories, inventory, sales, auth, users, unit_types, clients, payment_methods, supplier, purchase_order, branches, role
 from .database import Base, engine
 
-Base.metadata.create_all(bind=engine)
+#Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="SuperMarket Bolivia API",
